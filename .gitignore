@@ -1,0 +1,5 @@
+.env
+.agents
+AGENTS.md
+skills-lock.json
+.DS_Store
