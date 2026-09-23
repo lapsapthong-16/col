@@ -22,9 +22,10 @@ The main demo is a shopping agent. Additional browser, marketing, and marketplac
 - Base Sepolia as the demo network
 - USDC-denominated fixed prices
 - An x402-shaped payment flow, with real x402 support when configured
+- A hardcoded per-request agent spending cap
 - Multiple hardcoded request categories
 - One polished, deterministic shopping-agent walkthrough
-- Three independent human answers per bounty
+- Three simulated independent reviewer answers per bounty
 - Categorical answers only
 - A strict-majority consensus rule
 - Local deterministic state for repeatable judging
@@ -55,11 +56,12 @@ These exclusions are deliberate. The MVP validates the interaction and payment p
    - Choices: `Yes`, `No`, `Unclear`
    - Required answers: `3`
 4. The request displays its fixed cost before payment.
-5. The agent pays using x402 on Base Sepolia, or uses an explicitly labelled demo-payment fallback.
-6. The UI simulates the request entering the worker queue.
-7. Three seeded reviewers answer: `Yes`, `Yes`, `Unclear`.
-8. BountyQ returns a structured result with `Yes`, vote counts, and agreement.
-9. The shopping agent continues and selects the listing.
+5. The agent checks that the `$0.18 USDC` quote is within its hardcoded `$0.25 USDC` per-request spending cap.
+6. The agent client pays the x402-protected endpoint on Base Sepolia, or uses an explicitly labelled demo-payment fallback.
+7. The UI simulates the request entering the worker queue.
+8. Three seeded reviewers answer: `Yes`, `Yes`, `Unclear`.
+9. BountyQ returns a structured result with `Yes`, vote counts, and agreement.
+10. The shopping agent continues and selects the listing.
 
 The flow should take 60–90 seconds to present. It must not rely on timing luck, external reviewers, or hidden manual operations.
 
@@ -161,6 +163,8 @@ Do not estimate task difficulty. BountyQ accepts only short categorical judgment
 
 No custom contract is needed. Payment goes directly to a configured BountyQ treasury address. Accounting, escrow, and reviewer payout splitting are simulated in this version.
 
+The canonical payment path is **agent client → x402-protected HTTP endpoint**. RainbowKit exists so a judge can connect a browser wallet and interactively demonstrate the same payer role; it is not a requirement for agents integrating through code. Keep these two entry points conceptually separate even if they share payment utilities.
+
 ### Testing
 
 - Vitest for consensus, pricing, validation, and state transitions
@@ -184,6 +188,7 @@ Do not add an ORM, database client, global state library, form library, componen
 - Shopping-agent activity panel
 - Product/listing context and ambiguous label image
 - Bounty request preview
+- Agent spending-policy check
 - Fixed cost breakdown
 - Payment state
 - Human-answer collection visualization
@@ -233,7 +238,7 @@ This is the highest-priority page and should receive most of the product polish.
 - Base Sepolia network indicator
 - RainbowKit `ConnectButton`
 
-The wallet connector belongs in the header on every page. Connecting a wallet is optional for browsing, but required for real-payment mode.
+The wallet connector belongs in the header on every page. Connecting a wallet is optional for browsing. It is required only for the interactive browser-payment demo; an API agent supplies its own x402-capable wallet client.
 
 ### Core components
 
@@ -319,7 +324,7 @@ Behavior:
 
 ### `GET /api/demo/bounties/:id`
 
-Returns the deterministic request, current simulated state, answers, and result.
+Returns the seeded terminal result for the known deterministic bounty. The browser's reducer owns the animated presentation state; this route does not pretend to persist live server state.
 
 ### `POST /api/paid/bounties`
 
@@ -339,10 +344,11 @@ At implementation time, follow the current official Base/CDP x402 package and mi
 
 Use when all required credentials and addresses are configured.
 
-- Wallet must be connected to Base Sepolia.
-- UI presents the payment requirement and asks for wallet approval.
+- The API client requests the protected resource and receives the x402 payment requirement.
+- The x402-capable client signs the payment and retries the request.
+- In the interactive browser demo, RainbowKit provides the payer wallet and asks for approval.
 - A successful verified payment advances the request to `queued`.
-- Display the real transaction reference when the integration provides one.
+- Display and link the real Base Sepolia transaction when settlement provides one.
 
 ### Demo-payment fallback
 
@@ -383,7 +389,7 @@ Checkpoint: the app renders and the domain tests pass.
 
 - Build `/demo/shopping`.
 - Implement the deterministic reducer-driven sequence.
-- Add price, payment, vote, result, continuation, and reset states.
+- Add spending-cap, price, payment, vote, result, continuation, and reset states.
 - Ensure the entire flow works without network access in demo mode.
 
 Checkpoint: the primary demo is complete and repeatable.
@@ -412,13 +418,15 @@ Checkpoint: wallet connection works without affecting demo browsing.
 - Wire the real-payment UI behind the environment flag.
 - Preserve the explicit demo fallback.
 - Test success, declined payment, wrong network, and missing configuration.
+- Complete and record at least one real Base Sepolia payment and expose its explorer link in the demo.
 
-Checkpoint: a configured environment can make a real Base Sepolia payment, while an unconfigured environment remains demoable.
+Checkpoint: the submitted build demonstrates a real Base Sepolia x402 payment and explorer link, while an unconfigured environment remains demoable.
 
 ### Phase 6 — Hardening and presentation
 
 - Add loading, error, and reset behavior.
 - Check keyboard navigation, contrast, and mobile layout.
+- Reconcile `README.md` and `SUBMISSION.md` with the implemented BountyQ name, demo scenario, agreement terminology, and x402 architecture.
 - Run tests, typecheck, lint, and production build.
 - Rehearse the 60–90 second demo path.
 
@@ -429,6 +437,7 @@ Checkpoint: the build is judge-ready and its simulated parts are plainly labelle
 ### Unit tests
 
 - Fixed price equals `180000` micro-USDC.
+- A `$0.18` request passes the `$0.25` agent cap and a request above the cap is blocked before payment.
 - Two matching non-unclear votes resolve a three-answer request.
 - A three-way split is unresolved.
 - An `Unclear` majority does not create a factual result.
@@ -453,9 +462,11 @@ The MVP is complete when:
 - The result is machine-readable and visibly causes the agent to continue.
 - The other three scenarios show credible product breadth.
 - RainbowKit appears in the global header and supports Base Sepolia.
-- Real x402 payment can be enabled through configuration.
+- The agent-facing paid endpoint completes at least one real x402 payment on Base Sepolia.
+- The UI exposes a working Base explorer link for that payment.
 - Demo mode works without pretending a blockchain transaction occurred.
 - No custom smart contract is deployed or required.
+- `README.md` and `SUBMISSION.md` describe the product that was actually built, with simulated and live behavior clearly distinguished.
 - Tests, typecheck, lint, and production build pass.
 
 ## 16. Post-MVP Roadmap
@@ -476,4 +487,3 @@ Only pursue these after the demo validates demand:
 Use this framing during the presentation:
 
 > Agents are increasingly able to browse, create, and transact on their own. Their hardest failures are often tiny ambiguities that a person can resolve immediately. BountyQ lets an agent purchase three independent human judgments for a fixed micro-payment, receive a structured consensus, and continue running. The demo uses Base and x402 for machine-native payment, while keeping the human-answer workflow simple and transparent.
-
